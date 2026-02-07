@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -25,11 +25,15 @@ export default function Home() {
   const headerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const supabase = supabaseUrl && supabaseAnonKey 
-    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
-    : null
+  // 使用 useMemo 延迟创建客户端，避免构建时执行
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    return supabaseUrl && supabaseAnonKey 
+      ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+      : null
+  }, [])
 
 
   const fetchRoadmaps = async () => {
