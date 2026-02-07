@@ -4,13 +4,17 @@ import { useEffect, useState, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, User, BookOpen, GitFork } from 'lucide-react'
+import { ArrowLeft, User, BookOpen, GitFork, Clock } from 'lucide-react'
+import CalendarHeatmap from 'react-calendar-heatmap'
+import 'react-calendar-heatmap/dist/styles.css'
+import { subYears } from 'date-fns'
 
 export default function UserProfilePage() {
   const params = useParams()
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<any>(null)
   const [userRoadmaps, setUserRoadmaps] = useState<any[]>([])
+  const [heatmapData, setHeatmapData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const supabase = useMemo(() => {
@@ -50,6 +54,33 @@ export default function UserProfilePage() {
           .order('created_at', { ascending: false })
 
         setUserRoadmaps(roadmaps || [])
+
+        // 获取用户活跃度数据（公开数据）
+        try {
+          const { data: activityData } = await supabase
+            .from('user_activity')
+            .select('activity_date, count')
+            .eq('user_id', params.id)
+            .gte('activity_date', subYears(new Date(), 1).toISOString().split('T')[0])
+            .order('activity_date', { ascending: true })
+
+          const formattedData = activityData?.map(item => {
+            let dateStr = item.activity_date;
+            if (dateStr instanceof Date) {
+              dateStr = dateStr.toISOString().split('T')[0];
+            } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+              dateStr = dateStr.split('T')[0];
+            }
+            return {
+              date: dateStr,
+              count: Number(item.count) || 0
+            };
+          }) || [];
+          setHeatmapData(formattedData)
+        } catch (activityErr) {
+          console.warn('获取活跃度数据失败:', activityErr)
+          setHeatmapData([])
+        }
       } catch (err: any) {
         console.error('加载用户数据失败:', err)
       } finally {
@@ -114,6 +145,34 @@ export default function UserProfilePage() {
             </p>
           )}
         </header>
+
+        {/* 活跃度热力图 */}
+        {heatmapData.length > 0 && (
+          <section className="mb-16 pb-12 border-b border-[#2C2C2C]">
+            <div className="flex items-center gap-4 text-[#8E9775] mb-6">
+              <Clock size={16} className="opacity-50" />
+              <h2 className="text-xl font-light italic">活动热力图</h2>
+            </div>
+            <div className="border border-[#2C2C2C] p-6 rounded-lg bg-[#1E1E1E] overflow-x-auto">
+              <div className="min-w-[800px]">
+                <CalendarHeatmap
+                  startDate={subYears(new Date(), 1)}
+                  endDate={new Date()}
+                  values={heatmapData}
+                  classForValue={(value: any) => {
+                    if (!value || value.count === undefined) return 'color-empty'
+                    if (value.count === 0) return 'color-scale-0'
+                    if (value.count <= 2) return 'color-scale-1'
+                    if (value.count <= 4) return 'color-scale-2'
+                    return 'color-scale-3'
+                  }}
+                  showWeekdayLabels={true}
+                  showOutOfRangeDays={false}
+                />
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* 公开路线图 */}
         <section>
