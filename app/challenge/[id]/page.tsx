@@ -14,10 +14,22 @@ export default function ChallengePage() {
   
   const params = useParams()
   const router = useRouter()
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  
+  // 确保环境变量存在
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
   useEffect(() => {
     async function loadChallenge() {
+      if (!supabase) {
+        console.error('Supabase client not initialized')
+        setLoading(false)
+        return
+      }
+      
       try {
         const { data: prog } = await supabase.from('user_progress').select(`*, roadmaps(*)`).eq('id', params.id).single()
         if (prog) {
@@ -29,7 +41,7 @@ export default function ChallengePage() {
       finally { setLoading(false) }
     }
     loadChallenge()
-  }, [params.id])
+  }, [params.id, supabase])
 
   const handleComplete = async () => {
     if (updating) return

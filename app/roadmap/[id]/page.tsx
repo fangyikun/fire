@@ -71,10 +71,16 @@ export default function RoadmapDetail() {
 
   const params = useParams()
   const router = useRouter()
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  
+  // 确保环境变量存在
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
   const loadData = useCallback(async () => {
-    if (!params.id) return
+    if (!params.id || !supabase) return
     
     // 每次尝试加载时，都将 dataReady 设置为 false
     setDataReady(false);
@@ -220,7 +226,7 @@ export default function RoadmapDetail() {
   }, [loadData])
 
   const saveNote = async (nodeId: string, content: string) => {
-    if (!user) return
+    if (!user || !supabase) return
     
     // 如果有搭子契约，笔记设置为延迟释放（7天后解锁）
     let visibility = 'public';
@@ -247,7 +253,7 @@ export default function RoadmapDetail() {
   }
 
   const findCompanion = async () => {
-    if (!user || !roadmap) return
+    if (!user || !roadmap || !supabase) return
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
@@ -272,7 +278,7 @@ export default function RoadmapDetail() {
   }
 
   const createContract = async (partnerUserId: string) => {
-    if (!user || !roadmap) return
+    if (!user || !roadmap || !supabase) return
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
@@ -301,7 +307,7 @@ export default function RoadmapDetail() {
   }
 
   const sendDailyWhisper = async () => {
-    if (!contract || !dailyWhisper.trim()) return
+    if (!contract || !dailyWhisper.trim() || !supabase) return
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
@@ -329,7 +335,7 @@ export default function RoadmapDetail() {
   }
 
   const handleFork = async () => {
-    if (!user || !roadmap) return
+    if (!user || !roadmap || !supabase) return
     setForking(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
@@ -362,7 +368,7 @@ export default function RoadmapDetail() {
   }
 
   const saveReadme = async () => {
-    if (!user || !roadmap) return
+    if (!user || !roadmap || !supabase) return
     const { error } = await supabase
       .from('roadmaps')
       .update({ readme: readmeContent })

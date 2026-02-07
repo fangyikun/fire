@@ -8,10 +8,23 @@ import { ArrowLeft, BookMarked, Quote, Filter } from 'lucide-react'
 export default function ArchiveVault() {
   const [notes, setNotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  
+  // 确保环境变量存在
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
   useEffect(() => {
     async function fetchNotes() {
+      if (!supabase) {
+        console.error('Supabase client not initialized')
+        setLoading(false)
+        return
+      }
+      
       try {
         setLoading(true)
         // 核心：联表查询，带出节点标题和所属路径的分类
@@ -36,7 +49,7 @@ export default function ArchiveVault() {
       }
     }
     fetchNotes()
-  }, [])
+  }, [supabase])
 
   if (loading) return (
     <div className="min-h-screen bg-[#1A1A1A] flex items-center justify-center text-[#8E9775] font-serif uppercase tracking-[0.5em] animate-pulse">
