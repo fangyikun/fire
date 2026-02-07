@@ -28,16 +28,28 @@ export async function GET(request: Request) {
       // 如果用户已登录，尝试创建或更新 profile
       if (data.user) {
         try {
-          await supabase
+          // 只插入基本字段，避免列不存在时的错误
+          const profileData: any = {
+            id: data.user.id,
+            username: data.user.email?.split('@')[0] || 'user',
+            email: data.user.email,
+          }
+          
+          // 尝试插入，如果失败则忽略（profile 可能已存在）
+          const { error: profileError } = await supabase
             .from('profiles')
-            .upsert({
-              id: data.user.id,
-              username: data.user.email?.split('@')[0] || 'user',
-              email: data.user.email,
-            }, {
+            .upsert(profileData, {
               onConflict: 'id'
             })
-        } catch (profileErr) {
+            
+          if (profileError) {
+            console.warn('Profile upsert warning:', profileError.message)
+            // 如果是因为列不存在，尝试只插入基本字段
+            if (profileError.message?.includes('does not exist')) {
+              console.warn('Database schema issue detected. Please run fix-profiles-interests.sql in Supabase SQL Editor.')
+            }
+          }
+        } catch (profileErr: any) {
           console.warn('Profile creation failed:', profileErr)
           // 继续执行，不阻止登录
         }

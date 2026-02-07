@@ -149,9 +149,21 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error('Auth error:', err)
+      
+      // 处理特定错误
+      let errorMessage = err.message || '操作失败，请检查凭据。'
+      
+      if (err.message?.includes('User already registered') || err.message?.includes('already registered')) {
+        errorMessage = '该邮箱已注册，请直接登录。如果忘记密码，请联系管理员。'
+      } else if (err.message?.includes('Invalid login credentials')) {
+        errorMessage = '邮箱或密码错误，请重试。'
+      } else if (err.message?.includes('Email not confirmed')) {
+        errorMessage = '请先检查邮箱并点击确认链接完成注册。'
+      }
+      
       setMessage({ 
         type: 'error', 
-        text: err.message || '操作失败，请检查凭据。' 
+        text: errorMessage
       })
     } finally {
       setLoading(false)
