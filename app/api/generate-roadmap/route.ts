@@ -6,47 +6,69 @@ import { createClient } from '@supabase/supabase-js'; // Import createClient fro
 type AIProvider = 'gemini' | 'groq' | 'openrouter' | 'deepseek' | 'huggingface';
 
 export async function POST(req: Request) {
-  // 优先使用环境变量指定的提供商，默认为 groq
-  const provider: AIProvider = (process.env.AI_PROVIDER as AIProvider) || 'groq';
+  // 优先使用 Gemini（默认），如果用户指定了其他提供商则使用指定的
+  const preferredProvider: AIProvider = (process.env.AI_PROVIDER as AIProvider) || 'gemini';
+  
+  // 检查 Gemini API Key（优先使用）
+  const geminiApiKey = process.env.GEMINI_API_KEY;
   
   // 根据提供商获取对应的 API Key
   let apiKey: string | undefined;
   let apiUrl: string;
   let modelName: string;
+  let provider: AIProvider;
   
-  switch (provider) {
-    case 'groq':
-      apiKey = process.env.GROQ_API_KEY;
-      apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-      modelName = 'llama-3.3-70b-versatile'; // 或 'mixtral-8x7b-32768'
-      break;
-    case 'openrouter':
-      apiKey = process.env.OPENROUTER_API_KEY;
-      apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
-      modelName = 'meta-llama/llama-3.1-70b-instruct:free'; // 免费模型
-      break;
-    case 'deepseek':
-      apiKey = process.env.DEEPSEEK_API_KEY;
-      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
-      modelName = 'deepseek-chat';
-      break;
-    case 'huggingface':
-      apiKey = process.env.HUGGINGFACE_API_KEY;
-      apiUrl = `https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-70B-Instruct`;
-      modelName = 'meta-llama/Llama-3.1-70B-Instruct';
-      break;
-    case 'gemini':
-    default:
-      apiKey = process.env.GEMINI_API_KEY;
-      apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
-      modelName = 'gemini-2.5-flash';
-      break;
+  // 如果指定了 Gemini 且有 key，优先使用 Gemini
+  if (preferredProvider === 'gemini' && geminiApiKey) {
+    provider = 'gemini';
+    apiKey = geminiApiKey;
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    modelName = 'gemini-2.5-flash';
+  } else {
+    // 否则使用指定的提供商
+    provider = preferredProvider;
+    
+    switch (provider) {
+      case 'groq':
+        apiKey = process.env.GROQ_API_KEY;
+        apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+        modelName = 'llama-3.3-70b-versatile';
+        break;
+      case 'openrouter':
+        apiKey = process.env.OPENROUTER_API_KEY;
+        apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+        modelName = 'meta-llama/llama-3.1-70b-instruct:free';
+        break;
+      case 'deepseek':
+        apiKey = process.env.DEEPSEEK_API_KEY;
+        apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+        modelName = 'deepseek-chat';
+        break;
+      case 'huggingface':
+        apiKey = process.env.HUGGINGFACE_API_KEY;
+        apiUrl = `https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-70B-Instruct`;
+        modelName = 'meta-llama/Llama-3.1-70B-Instruct';
+        break;
+      case 'gemini':
+      default:
+        apiKey = geminiApiKey;
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+        modelName = 'gemini-2.5-flash';
+        break;
+    }
   }
   
-  if (!apiKey && provider !== 'gemini') {
-    return NextResponse.json({ 
-      error: `${provider.toUpperCase()} API Key 未配置。请在环境变量中设置 ${provider.toUpperCase()}_API_KEY` 
-    }, { status: 500 });
+  // 检查 API Key
+  if (!apiKey) {
+    if (provider === 'gemini') {
+      return NextResponse.json({ 
+        error: 'Gemini API Key 未配置。请在环境变量中设置 GEMINI_API_KEY' 
+      }, { status: 500 });
+    } else {
+      return NextResponse.json({ 
+        error: `${provider.toUpperCase()} API Key 未配置。请在环境变量中设置 ${provider.toUpperCase()}_API_KEY，或使用 Gemini（设置 GEMINI_API_KEY）` 
+      }, { status: 500 });
+    }
   }
 
   // Initialize Supabase client for the backend
@@ -157,7 +179,7 @@ export async function POST(req: Request) {
         if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
           const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
           return NextResponse.json({ 
-            error: `模型调用异常: API 配额已用完。免费配额限制为每天 20 次请求。请稍后再试（建议等待 ${retryAfter} 后重试），或升级您的 API 计划。` 
+            error: `模型调用异常: Gemini API 配额已用完（免费配额限制为每天 20 次请求）。请稍后再试（建议等待 ${retryAfter} 后重试），或配置其他 AI 提供商（Groq、OpenRouter 等）。` 
           }, { status: 429 });
         }
         
