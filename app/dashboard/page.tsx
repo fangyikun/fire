@@ -58,12 +58,12 @@ export default function MissionControl() {
       }
 
       // 2. 获取用户资料 (昵称, 学习时间)
-      // 使用 * 选择所有列，避免列不存在时的错误
+      // 使用 maybeSingle() 而不是 single()，因为 profile 可能不存在
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('username, learning_time_seconds')
         .eq('id', user.id)
-        .single();
+        .maybeSingle(); // 使用 maybeSingle() 允许返回 null
       
       if (profileError) {
         console.warn("获取用户资料失败 (可能未创建):", profileError.message);
@@ -74,6 +74,10 @@ export default function MissionControl() {
         setUsername(profileData.username || user.email?.split('@')[0] || null);
         // 安全地获取 learning_time_seconds，如果列不存在则默认为 0
         setLearningTime(profileData.learning_time_seconds ?? 0);
+      } else {
+        // profile 不存在，使用默认值
+        setUsername(user.email?.split('@')[0] || null);
+        setLearningTime(0);
       }
 
       // 3. 获取用户学习路径

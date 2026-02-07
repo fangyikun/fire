@@ -9,6 +9,15 @@ export async function GET(req: Request) {
   );
 
   try {
+    // 检查环境变量
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("Missing Supabase environment variables");
+      return NextResponse.json({ 
+        error: "服务器配置错误",
+        roadmaps: [] 
+      }, { status: 500 });
+    }
+
     // Authenticate user on the backend using access_token from header
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.split(' ')[1]; // Expecting "Bearer YOUR_ACCESS_TOKEN"
@@ -34,10 +43,15 @@ export async function GET(req: Request) {
 
     if (roadmapsError) {
       console.error("查询用户路线图失败:", roadmapsError);
-      throw roadmapsError;
+      // 返回空数组而不是抛出错误
+      return NextResponse.json({ 
+        error: roadmapsError.message,
+        roadmaps: [] 
+      }, { status: 500 });
     }
 
-    return NextResponse.json(roadmaps);
+    // 确保返回数组
+    return NextResponse.json(Array.isArray(roadmaps) ? roadmaps : []);
 
   } catch (error: any) {
     console.error("❌ 获取用户路线图失败:", error.message);
