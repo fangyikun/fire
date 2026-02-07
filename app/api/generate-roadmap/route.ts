@@ -22,8 +22,18 @@ export async function POST(req: Request) {
   if (preferredProvider === 'gemini' && geminiApiKey) {
     provider = 'gemini';
     apiKey = geminiApiKey;
-    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-    modelName = 'gemini-2.5-flash';
+    
+    // 支持多个 Gemini 模型，按优先级尝试
+    // 可以通过 GEMINI_MODEL 环境变量指定，默认为 gemini-1.5-flash（免费且配额更高）
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    // 可用的免费模型：
+    // - gemini-1.5-flash: 免费，配额更高，速度快
+    // - gemini-1.5-pro: 免费，功能更强
+    // - gemini-2.5-flash: 免费，但配额较低（每天20次）
+    // - gemini-pro: 免费，较老的模型
+    
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+    modelName = geminiModel;
   } else {
     // 否则使用指定的提供商
     provider = preferredProvider;
@@ -52,8 +62,9 @@ export async function POST(req: Request) {
       case 'gemini':
       default:
         apiKey = geminiApiKey;
-        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
-        modelName = 'gemini-2.5-flash';
+        const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
+        modelName = geminiModel;
         break;
     }
   }
@@ -178,8 +189,18 @@ export async function POST(req: Request) {
         
         if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
           const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
+          const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+          
+          // 如果当前使用的是配额较低的模型，建议切换到其他模型
+          let suggestion = '';
+          if (currentModel === 'gemini-2.5-flash') {
+            suggestion = '建议切换到 gemini-1.5-flash（配额更高），在环境变量中设置 GEMINI_MODEL=gemini-1.5-flash';
+          } else if (currentModel === 'gemini-1.5-pro') {
+            suggestion = '建议切换到 gemini-1.5-flash（配额更高），在环境变量中设置 GEMINI_MODEL=gemini-1.5-flash';
+          }
+          
           return NextResponse.json({ 
-            error: `模型调用异常: Gemini API 配额已用完（免费配额限制为每天 20 次请求）。请稍后再试（建议等待 ${retryAfter} 后重试），或配置其他 AI 提供商（Groq、OpenRouter 等）。` 
+            error: `模型调用异常: Gemini ${currentModel} API 配额已用完。请稍后再试（建议等待 ${retryAfter} 后重试）。${suggestion ? suggestion + '，或' : ''}或配置其他 AI 提供商（Groq、OpenRouter 等）。` 
           }, { status: 429 });
         }
         
