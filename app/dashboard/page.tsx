@@ -22,7 +22,7 @@ export default function MissionControl() {
 
   const filteredRoadmaps = activeTab === 'all' 
   ? userRoadmaps 
-  : userRoadmaps.filter(r => r.category === activeTab);
+  : userRoadmaps.filter(r => (r.category || r.roadmaps?.category) === activeTab);
   
   const router = useRouter()
   // 使用 useMemo 延迟创建客户端，避免构建时执行
@@ -186,26 +186,91 @@ export default function MissionControl() {
               Personal Research Repository / ADL-2026
             </p>
           </div>
-
-          <div className="flex gap-12 mb-20 border-b border-[#2C2C2C] pb-4 overflow-x-auto no-scrollbar">
-  {['all', 'book', 'film', 'music', 'course'].map((tab) => (
-    <button
-      key={tab}
-      onClick={() => setActiveTab(tab)}
-      className={`text-[10px] tracking-[0.4em] uppercase transition-all ${
-        activeTab === tab ? 'text-[#8E9775] opacity-100' : 'opacity-30 hover:opacity-60'
-      }`}
-    >
-      {tab === 'all' ? 'Everything' : `${tab}s`}
-    </button>
-  ))}
-</div>
           
           <Link href="/" className="group flex items-center gap-4 text-[11px] tracking-[0.4em] uppercase border border-[#2C2C2C] px-8 py-4 rounded-full hover:bg-[#DCD7C9] hover:text-black transition-all duration-1000">
             <Plus size={14} className="group-hover:rotate-90 transition-transform duration-500" />
             Invoke New Idea
           </Link>
         </header>
+
+        {/* 统计信息和热力图 */}
+        <section className="mb-20 grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* 统计数据 */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 text-[#8E9775] mb-6">
+              <BookOpen size={16} className="opacity-50" />
+              <span className="text-[10px] tracking-[0.4em] uppercase">Statistics</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border border-[#2C2C2C] p-6 rounded-lg">
+                <div className="text-[#666] text-[9px] uppercase tracking-widest mb-2">Roadmaps</div>
+                <div className="text-3xl font-light text-white">{userRoadmaps.length}</div>
+              </div>
+              <div className="border border-[#2C2C2C] p-6 rounded-lg">
+                <div className="text-[#666] text-[9px] uppercase tracking-widest mb-2">Notes</div>
+                <div className="text-3xl font-light text-white">{notesCount}</div>
+              </div>
+              <div className="border border-[#2C2C2C] p-6 rounded-lg">
+                <div className="text-[#666] text-[9px] uppercase tracking-widest mb-2">Learning Time</div>
+                <div className="text-3xl font-light text-white">
+                  {Math.floor(learningTime / 3600)}h
+                </div>
+              </div>
+              <div className="border border-[#2C2C2C] p-6 rounded-lg">
+                <div className="text-[#666] text-[9px] uppercase tracking-widest mb-2">Active Days</div>
+                <div className="text-3xl font-light text-white">{heatmapData.length}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 热力图 */}
+          <div>
+            <div className="flex items-center gap-4 text-[#8E9775] mb-6">
+              <Clock size={16} className="opacity-50" />
+              <span className="text-[10px] tracking-[0.4em] uppercase">Activity Heatmap</span>
+            </div>
+            <div className="border border-[#2C2C2C] p-6 rounded-lg bg-[#1E1E1E]">
+              {heatmapData.length > 0 ? (
+                <CalendarHeatmap
+                  startDate={subYears(new Date(), 1)}
+                  endDate={new Date()}
+                  values={heatmapData.map((item: any) => ({
+                    date: item.date,
+                    count: item.count || 0
+                  }))}
+                  classForValue={(value: any) => {
+                    if (!value) return 'color-empty'
+                    if (value.count === 0) return 'color-scale-0'
+                    if (value.count <= 2) return 'color-scale-1'
+                    if (value.count <= 4) return 'color-scale-2'
+                    return 'color-scale-3'
+                  }}
+                />
+              ) : (
+                <div className="text-center py-12 text-[#666] text-sm italic">
+                  No activity data yet
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* 标签过滤 */}
+        <div className="mb-12 border-b border-[#2C2C2C] pb-4">
+          <div className="flex gap-12 overflow-x-auto no-scrollbar">
+            {['all', 'book', 'film', 'music', 'course'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`text-[10px] tracking-[0.4em] uppercase transition-all whitespace-nowrap ${
+                  activeTab === tab ? 'text-[#8E9775] opacity-100' : 'opacity-30 hover:opacity-60'
+                }`}
+              >
+                {tab === 'all' ? 'Everything' : `${tab}s`}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* 陈列架部分 */}
         {filteredRoadmaps.length === 0 ? (
@@ -229,11 +294,18 @@ export default function MissionControl() {
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#8E9775]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     
                     <div className="space-y-6">
-                      <h2 className="text-3xl font-light leading-tight text-white group-hover:italic transition-all duration-700">
-                        {item.roadmaps?.title}
-                      </h2>
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-3xl font-light leading-tight text-white group-hover:italic transition-all duration-700">
+                          {item.title || item.roadmaps?.title}
+                        </h2>
+                        {(item.category || item.roadmaps?.category) && (
+                          <span className="text-[8px] text-[#666] border border-[#2C2C2C] bg-[#1E1E1E] px-2 py-1 rounded uppercase tracking-widest">
+                            {item.category || item.roadmaps?.category}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[#666] text-xs leading-relaxed italic line-clamp-4 font-sans opacity-0 group-hover:opacity-100 transition-all duration-700 delay-100">
-                        {item.roadmaps?.description}
+                        {item.description || item.roadmaps?.description}
                       </p>
                     </div>
 

@@ -53,3 +53,44 @@ textarea {
   outline: none;
   resize: vertical; /* Allow vertical resizing */
 }
+
+/* Calendar Heatmap 样式 */
+.react-calendar-heatmap {
+  width: 100%;
+}
+
+.react-calendar-heatmap .color-empty {
+  fill: #1E1E1E;
+}
+
+.react-calendar-heatmap .color-scale-0 {
+  fill: #1E1E1E;
+}
+
+.react-calendar-heatmap .color-scale-1 {
+  fill: #2C2C2C;
+}
+
+.react-calendar-heatmap .color-scale-2 {
+  fill: #8E9775;
+  opacity: 0.5;
+}
+
+.react-calendar-heatmap .color-scale-3 {
+  fill: #8E9775;
+  opacity: 0.8;
+}
+
+.react-calendar-heatmap .color-scale-4 {
+  fill: #8E9775;
+}
+
+.react-calendar-heatmap rect {
+  rx: 2;
+  ry: 2;
+}
+
+.react-calendar-heatmap text {
+  font-size: 8px;
+  fill: #666;
+}
