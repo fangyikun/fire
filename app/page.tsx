@@ -186,7 +186,11 @@ export default function Home() {
       })
       
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error)
+      if (!res.ok) {
+        // 提供更友好的错误消息
+        const errorMsg = result.error || '生成路线图失败，请稍后重试'
+        throw new Error(errorMsg)
+      }
 
       // Navigate to the new roadmap
       if (result.roadmapId) {
@@ -372,7 +376,7 @@ export default function Home() {
 
         {/* 视错觉路径线 - 只在对方视角时显示 */}
         {showCompanionView && (
-          <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.4 }}>
+          <svg className="absolute inset-0 w-full h-full" style={{ opacity: 0.4 }} viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
               <linearGradient id="pathGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#FD8A6B" stopOpacity="0.8" />
@@ -381,13 +385,13 @@ export default function Home() {
               </linearGradient>
             </defs>
             <path
-              d={`M 25% 25% 
-                  L ${50 + Math.sin(geometryRotation) * 5}% ${50 + Math.cos(geometryRotation) * 3}%
-                  L 75% 75%`}
+              d={`M 25 25 
+                  L ${50 + Math.sin(geometryRotation) * 5} ${50 + Math.cos(geometryRotation) * 3}
+                  L 75 75`}
               fill="none"
               stroke="url(#pathGradient)"
-              strokeWidth="3"
-              strokeDasharray="10,5"
+              strokeWidth="0.3"
+              strokeDasharray="1,0.5"
               style={{
                 animation: 'drawPath 2s ease-out',
               }}

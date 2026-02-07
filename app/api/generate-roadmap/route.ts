@@ -97,8 +97,25 @@ export async function POST(req: Request) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Google 报错:", data);
-      throw new Error(`模型调用异常: ${data.error?.message}`);
+      console.error("Google API 报错:", data);
+      const errorMessage = data.error?.message || '未知错误';
+      
+      // 处理地理限制错误
+      if (errorMessage.includes('location') || errorMessage.includes('not supported')) {
+        return NextResponse.json({ 
+          error: '模型调用异常: 您所在的地区暂不支持此服务。请检查您的网络设置或联系管理员。' 
+        }, { status: 403 });
+      }
+      
+      // 处理配额超限错误
+      if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
+        const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
+        return NextResponse.json({ 
+          error: `模型调用异常: API 配额已用完。免费配额限制为每天 20 次请求。请稍后再试（建议等待 ${retryAfter} 后重试），或升级您的 API 计划。` 
+        }, { status: 429 });
+      }
+      
+      throw new Error(`模型调用异常: ${errorMessage}`);
     }
 
     // ✅ 解析逻辑优化
