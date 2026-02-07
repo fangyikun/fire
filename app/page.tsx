@@ -38,16 +38,27 @@ export default function Home() {
 
   const fetchRoadmaps = async () => {
     if (!supabase) return
-    // 只获取公开的roadmaps，关联查询用户信息
-    const { data } = await supabase
-      .from('roadmaps')
-      .select(`
-        *,
-        profiles:user_id (id, username)
-      `)
-      .eq('is_public', true)
-      .order('created_at', { ascending: false })
-    setRoadmaps(data || [])
+    try {
+      // 只获取公开的roadmaps，关联查询用户信息
+      const { data, error } = await supabase
+        .from('roadmaps')
+        .select(`
+          *,
+          profiles:user_id (id, username)
+        `)
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.warn('获取公开路线图失败:', error.message)
+        setRoadmaps([])
+      } else {
+        setRoadmaps(data || [])
+      }
+    } catch (err: any) {
+      console.error('获取路线图时出错:', err)
+      setRoadmaps([])
+    }
   }
 
   useEffect(() => { 
@@ -59,11 +70,12 @@ export default function Home() {
       if (user) {
         setCurrentUser(user)
         // 获取用户profile（包含nickname和username）
+        // 使用 maybeSingle() 因为 profile 可能不存在
         const { data: profile } = await supabase
           .from('profiles')
           .select('username, nickname')
           .eq('id', user.id)
-          .single()
+          .maybeSingle()
         setUserProfile(profile)
       }
     }
