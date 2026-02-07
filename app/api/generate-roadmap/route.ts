@@ -165,17 +165,21 @@ export async function POST(req: Request) {
       };
       
       // Gemini 模型优先级列表（按配额和可用性排序）
+      // 即使用户指定了模型，如果配额用完也会自动尝试其他模型
       const userSpecifiedModel = process.env.GEMINI_MODEL;
+      const defaultModels = [
+        'gemini-1.5-flash',      // 配额高，速度快，推荐
+        'gemini-2.5-flash-lite',  // 轻量级，配额较高
+        'gemini-2.5-flash',       // 最新版本，但配额低
+        'gemini-2.0-flash',       // 备选版本
+        'gemini-1.5-pro',         // 功能强，但可能配额低
+        'gemini-pro'              // 经典版本
+      ];
+      
+      // 如果用户指定了模型，优先尝试用户指定的，然后尝试其他模型
       const geminiModels = userSpecifiedModel 
-        ? [userSpecifiedModel] // 如果用户指定了，只尝试这个
-        : [
-            'gemini-1.5-flash',      // 配额高，速度快，推荐
-            'gemini-2.5-flash-lite',  // 轻量级，配额较高
-            'gemini-2.5-flash',       // 最新版本，但配额低
-            'gemini-2.0-flash',       // 备选版本
-            'gemini-1.5-pro',         // 功能强，但可能配额低
-            'gemini-pro'              // 经典版本
-          ];
+        ? [userSpecifiedModel, ...defaultModels.filter(m => m !== userSpecifiedModel)]
+        : defaultModels;
       
       // 智能尝试不同的 Gemini 模型
       let lastError: any = null;
@@ -227,8 +231,8 @@ export async function POST(req: Request) {
             const errorMsg = data.error?.message || data.error || JSON.stringify(data).substring(0, 200);
             console.error(`❌ Gemini ${model} 调用失败:`, errorMsg);
             
-            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429')) {
-              console.log(`⚠️ Gemini ${model} 配额已用完，尝试下一个模型...`);
+            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('free_tier')) {
+              console.log(`⚠️ Gemini ${model} 配额已用完（${errorMsg}），尝试下一个模型...`);
               lastError = data;
               lastErrorModel = model;
               continue; // 尝试下一个模型
