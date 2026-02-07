@@ -278,7 +278,7 @@ export default function MissionControl() {
             <Compass className="w-12 h-12 text-[#2C2C2C] group-hover:text-[#8E9775] transition-colors duration-1000" />
             <div className="text-center space-y-2">
                <p className="italic text-lg text-[#444]">此处空无一物，静候灵感降临。</p>
-               <Link href="/" className="text-[10px] text-[#8E9775] tracking-widest uppercase hover:underline">开始第一次研究</Link>
+               <Link href="/?openInput=true" className="text-[10px] text-[#8E9775] tracking-widest uppercase hover:underline">开始第一次研究</Link>
             </div>
           </div>
         ) : (

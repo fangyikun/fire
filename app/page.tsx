@@ -78,6 +78,17 @@ export default function Home() {
     }
     checkUser()
     
+    // 检查 URL 参数，如果 openInput=true 则自动打开输入框
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const openInput = params.get('openInput')
+      if (openInput === 'true') {
+        setIsInputOpen(true)
+        // 清除 URL 参数，避免刷新时重复打开
+        window.history.replaceState({}, '', '/')
+      }
+    }
+    
     // 页面加载动画
     setIsVisible(true)
     
