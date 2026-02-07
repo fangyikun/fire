@@ -18,22 +18,17 @@ export async function POST(req: Request) {
   let modelName: string;
   let provider: AIProvider;
   
-  // 如果指定了 Gemini 且有 key，优先使用 Gemini
+  // 如果指定了 Gemini 且有 key，设置 Gemini 为提供商
+  // 实际的智能回退会在调用 API 时进行
   if (preferredProvider === 'gemini' && geminiApiKey) {
     provider = 'gemini';
     apiKey = geminiApiKey;
     
-    // 支持多个 Gemini 模型，按优先级尝试
-    // 可以通过 GEMINI_MODEL 环境变量指定，默认为 gemini-1.5-flash（免费且配额更高）
-    const geminiModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-    // 可用的免费模型：
-    // - gemini-1.5-flash: 免费，配额更高，速度快
-    // - gemini-1.5-pro: 免费，功能更强
-    // - gemini-2.5-flash: 免费，但配额较低（每天20次）
-    // - gemini-pro: 免费，较老的模型
-    
-    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`;
-    modelName = geminiModel;
+    // 如果用户指定了模型，使用指定的；否则使用默认
+    const userSpecifiedModel = process.env.GEMINI_MODEL;
+    const defaultModel = userSpecifiedModel || 'gemini-1.5-flash';
+    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${defaultModel}:generateContent?key=${geminiApiKey}`;
+    modelName = defaultModel;
   } else {
     // 否则使用指定的提供商
     provider = preferredProvider;
@@ -158,10 +153,10 @@ export async function POST(req: Request) {
     // 根据不同的提供商构建请求
     let response: Response;
     let data: any;
-    let rawText: string;
+    let rawText: string = ''; // 初始化为空字符串，确保类型安全
     
     if (provider === 'gemini') {
-      // Gemini API 格式
+      // Gemini API 格式 - 智能回退机制
       const payload = {
         contents: [{ parts: [{ text: systemPrompt }] }],
         generationConfig: {
@@ -169,46 +164,79 @@ export async function POST(req: Request) {
         }
       };
       
-      response = await fetch(apiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      // Gemini 模型优先级列表（按配额和可用性排序）
+      const userSpecifiedModel = process.env.GEMINI_MODEL;
+      const geminiModels = userSpecifiedModel 
+        ? [userSpecifiedModel] // 如果用户指定了，只尝试这个
+        : [
+            'gemini-1.5-flash',      // 配额高，速度快，推荐
+            'gemini-2.5-flash-lite',  // 轻量级，配额较高
+            'gemini-2.5-flash',       // 最新版本，但配额低
+            'gemini-2.0-flash',       // 备选版本
+            'gemini-1.5-pro',         // 功能强，但可能配额低
+            'gemini-pro'              // 经典版本
+          ];
       
-      data = await response.json();
+      // 智能尝试不同的 Gemini 模型
+      let lastError: any = null;
+      let success = false;
       
-      if (!response.ok) {
-        console.error("Gemini API 报错:", data);
-        const errorMessage = data.error?.message || '未知错误';
-        
-        if (errorMessage.includes('location') || errorMessage.includes('not supported')) {
-          return NextResponse.json({ 
-            error: '模型调用异常: 您所在的地区暂不支持此服务。请检查您的网络设置或联系管理员。' 
-          }, { status: 403 });
-        }
-        
-        if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
-          const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
-          const currentModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+      for (const model of geminiModels) {
+        try {
+          const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
           
-          // 如果当前使用的是配额较低的模型，建议切换到其他模型
-          let suggestion = '';
-          if (currentModel === 'gemini-2.5-flash') {
-            suggestion = '建议切换到 gemini-1.5-flash（配额更高），在环境变量中设置 GEMINI_MODEL=gemini-1.5-flash';
-          } else if (currentModel === 'gemini-1.5-pro') {
-            suggestion = '建议切换到 gemini-1.5-flash（配额更高），在环境变量中设置 GEMINI_MODEL=gemini-1.5-flash';
+          response = await fetch(modelUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          
+          data = await response.json();
+          
+          if (response.ok) {
+            // 成功！使用这个模型
+            console.log(`✅ 成功使用 Gemini 模型: ${model}`);
+            rawText = data.candidates[0].content.parts[0].text;
+            success = true;
+            break;
+          } else {
+            // 检查错误类型
+            const errorMsg = data.error?.message || '';
+            
+            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit')) {
+              console.log(`⚠️ Gemini ${model} 配额已用完，尝试下一个模型...`);
+              lastError = data;
+              continue; // 尝试下一个模型
+            } else if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found')) {
+              console.log(`⚠️ Gemini ${model} 不可用，尝试下一个模型...`);
+              lastError = data;
+              continue; // 尝试下一个模型
+            } else if (errorMsg.includes('location') || errorMsg.includes('not supported')) {
+              // 地理限制，也尝试下一个
+              console.log(`⚠️ Gemini ${model} 地区不支持，尝试下一个模型...`);
+              lastError = data;
+              continue;
+            } else {
+              // 其他错误，也尝试下一个
+              console.log(`⚠️ Gemini ${model} 调用失败: ${errorMsg}，尝试下一个模型...`);
+              lastError = data;
+              continue;
+            }
           }
-          
-          return NextResponse.json({ 
-            error: `模型调用异常: Gemini ${currentModel} API 配额已用完。请稍后再试（建议等待 ${retryAfter} 后重试）。${suggestion ? suggestion + '，或' : ''}或配置其他 AI 提供商（Groq、OpenRouter 等）。` 
-          }, { status: 429 });
+        } catch (err: any) {
+          console.log(`⚠️ Gemini ${model} 请求异常: ${err.message}，尝试下一个模型...`);
+          lastError = err;
+          continue;
         }
-        
-        throw new Error(`模型调用异常: ${errorMessage}`);
       }
       
-      // Gemini 返回格式
-      rawText = data.candidates[0].content.parts[0].text;
+      if (!success) {
+        // 所有 Gemini 模型都失败了
+        const errorMsg = lastError?.error?.message || lastError?.message || '所有 Gemini 模型都不可用';
+        return NextResponse.json({ 
+          error: `模型调用异常: ${errorMsg}。已尝试所有可用的 Gemini 模型（${geminiModels.join(', ')}）。建议配置其他 AI 提供商（Groq、OpenRouter 等）。` 
+        }, { status: 500 });
+      }
     } else if (provider === 'huggingface') {
       // Hugging Face API 格式（不同）
       response = await fetch(apiUrl, {
