@@ -181,107 +181,144 @@ export async function POST(req: Request) {
         ? [userSpecifiedModel, ...defaultModels.filter(m => m !== userSpecifiedModel)]
         : defaultModels;
       
-      // 智能尝试不同的 Gemini 模型
+      // 智能尝试不同的 Gemini 模型和 API 版本
+      // 注意：某些模型在 v1 中可用，某些在 v1beta 中可用
       let lastError: any = null;
       let lastErrorModel = '';
       let success = false;
       
       for (const model of geminiModels) {
-        try {
-          const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-          
-          console.log(`🔄 尝试 Gemini 模型: ${model}`);
-          
-          response = await fetch(modelUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          
-          // 检查响应状态
-          const responseText = await response.text();
-          let responseData: any;
-          
+        // 为每个模型尝试两个 API 版本：先 v1，再 v1beta
+        const apiVersions = ['v1', 'v1beta'];
+        let modelSuccess = false;
+        
+        for (const apiVersion of apiVersions) {
           try {
-            responseData = JSON.parse(responseText);
-          } catch (parseErr) {
-            console.error(`❌ Gemini ${model} 响应解析失败:`, responseText.substring(0, 200));
-            lastError = { error: { message: `响应格式错误: ${responseText.substring(0, 100)}` } };
-            lastErrorModel = model;
-            continue;
-          }
-          
-          data = responseData;
-          
-          if (response.ok) {
-            // 成功！使用这个模型
-            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-              console.log(`✅ 成功使用 Gemini 模型: ${model}`);
-              rawText = data.candidates[0].content.parts[0].text;
-              success = true;
-              break;
+            const modelUrl = `https://generativelanguage.googleapis.com/${apiVersion}/models/${model}:generateContent?key=${apiKey}`;
+            
+            console.log(`🔄 尝试 Gemini 模型: ${model} (API: ${apiVersion})`);
+            
+            response = await fetch(modelUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload)
+            });
+            
+            // 检查响应状态
+            const responseText = await response.text();
+            let responseData: any;
+            
+            try {
+              responseData = JSON.parse(responseText);
+            } catch (parseErr) {
+              console.error(`❌ Gemini ${model} (${apiVersion}) 响应解析失败:`, responseText.substring(0, 200));
+              if (apiVersion === 'v1beta') {
+                // 如果 v1beta 也失败，记录错误并尝试下一个模型
+                lastError = { error: { message: `响应格式错误: ${responseText.substring(0, 100)}` } };
+                lastErrorModel = model;
+              }
+              continue; // 尝试下一个 API 版本
+            }
+            
+            data = responseData;
+            
+            if (response.ok) {
+              // 成功！使用这个模型和 API 版本
+              if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                console.log(`✅ 成功使用 Gemini 模型: ${model} (API: ${apiVersion})`);
+                rawText = data.candidates[0].content.parts[0].text;
+                success = true;
+                modelSuccess = true;
+                break; // 跳出 API 版本循环
+              } else {
+                console.error(`❌ Gemini ${model} (${apiVersion}) 响应格式异常:`, JSON.stringify(data).substring(0, 200));
+                if (apiVersion === 'v1beta') {
+                  lastError = { error: { message: '响应格式异常，缺少 candidates 数据' } };
+                  lastErrorModel = model;
+                }
+                continue; // 尝试下一个 API 版本
+              }
             } else {
-              console.error(`❌ Gemini ${model} 响应格式异常:`, JSON.stringify(data).substring(0, 200));
-              lastError = { error: { message: '响应格式异常，缺少 candidates 数据' } };
+              // 检查错误类型，明确区分是模型问题还是 API 问题
+              const errorMsg = data.error?.message || data.error || JSON.stringify(data).substring(0, 200);
+              const errorCode = data.error?.code || response.status;
+              const errorStatus = data.error?.status || '';
+              
+              console.error(`❌ Gemini ${model} (${apiVersion}) 调用失败 [状态码: ${errorCode}, 状态: ${errorStatus}]:`, errorMsg);
+              
+              // 1. API Key 问题（API 配置问题）- 立即返回，不需要尝试其他版本
+              if (errorMsg.includes('API key') || errorMsg.includes('Invalid API key') || errorMsg.includes('401') || errorCode === 401) {
+                console.error(`❌ [API 问题] API Key 无效或已过期`);
+                return NextResponse.json({ 
+                  error: `[API 配置问题] Gemini API Key 无效或已过期。请检查 GEMINI_API_KEY 环境变量是否正确。` 
+                }, { status: 401 });
+              }
+              
+              // 2. 地理限制（API 地区限制）- 如果遇到地区限制，不需要尝试其他 API 版本
+              if (errorMsg.includes('User location is not supported') || 
+                  (errorMsg.includes('location') && errorMsg.includes('not supported')) || 
+                  errorStatus === 'FAILED_PRECONDITION' ||
+                  (errorCode === 400 && errorMsg.includes('location')) ||
+                  errorCode === 403) {
+                console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持（${errorMsg}），尝试下一个模型...`);
+                lastError = { type: 'location', model, error: data };
+                lastErrorModel = model;
+                modelSuccess = false;
+                break; // 跳出 API 版本循环，尝试下一个模型
+              }
+              
+              // 3. 配额问题（API 配额限制）- 如果遇到配额问题，不需要尝试其他 API 版本
+              if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('free_tier') || errorCode === 429) {
+                console.log(`⚠️ [API 配额问题] Gemini ${model} 配额已用完，尝试下一个模型...`);
+                lastError = { type: 'quota', model, error: data };
+                lastErrorModel = model;
+                modelSuccess = false;
+                break; // 跳出 API 版本循环，尝试下一个模型
+              }
+              
+              // 4. 模型不存在问题（模型配置问题）- 如果 v1 中不存在，尝试 v1beta
+              if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model') || errorMsg.includes('is not found for API version') || errorMsg.includes('is not supported') || errorCode === 404) {
+                if (apiVersion === 'v1') {
+                  console.log(`⚠️ [模型问题] Gemini ${model} 在 v1 中不存在，尝试 v1beta...`);
+                  continue; // 尝试 v1beta
+                } else {
+                  // v1beta 也失败，记录错误并尝试下一个模型
+                  console.log(`⚠️ [模型问题] Gemini ${model} 在 v1 和 v1beta 中都不存在或不支持，尝试下一个模型...`);
+                  lastError = { type: 'model_not_found', model, error: data };
+                  lastErrorModel = model;
+                  modelSuccess = false;
+                  break; // 跳出 API 版本循环，尝试下一个模型
+                }
+              }
+              
+              // 5. 其他 API 错误 - 如果 v1 失败，尝试 v1beta
+              if (apiVersion === 'v1') {
+                console.log(`⚠️ [API 其他错误] Gemini ${model} (v1) 调用失败: ${errorMsg}，尝试 v1beta...`);
+                continue; // 尝试 v1beta
+              } else {
+                // v1beta 也失败，记录错误并尝试下一个模型
+                console.log(`⚠️ [API 其他错误] Gemini ${model} (v1beta) 调用失败: ${errorMsg}，尝试下一个模型...`);
+                lastError = { type: 'other', model, error: data, message: errorMsg };
+                lastErrorModel = model;
+                modelSuccess = false;
+                break; // 跳出 API 版本循环，尝试下一个模型
+              }
+            }
+          } catch (err: any) {
+            console.error(`❌ [API 网络错误] Gemini ${model} (${apiVersion}) 请求异常:`, err.message);
+            if (apiVersion === 'v1beta') {
+              // 如果 v1beta 也失败，记录错误并尝试下一个模型
+              lastError = { type: 'network', model, error: { message: err.message }, raw: err };
               lastErrorModel = model;
-              continue;
+              modelSuccess = false;
             }
-          } else {
-            // 检查错误类型，明确区分是模型问题还是 API 问题
-            const errorMsg = data.error?.message || data.error || JSON.stringify(data).substring(0, 200);
-            const errorCode = data.error?.code || response.status;
-            const errorStatus = data.error?.status || '';
-            
-            console.error(`❌ Gemini ${model} 调用失败 [状态码: ${errorCode}, 状态: ${errorStatus}]:`, errorMsg);
-            
-            // 1. API Key 问题（API 配置问题）
-            if (errorMsg.includes('API key') || errorMsg.includes('Invalid API key') || errorMsg.includes('401') || errorCode === 401) {
-              console.error(`❌ [API 问题] API Key 无效或已过期`);
-              return NextResponse.json({ 
-                error: `[API 配置问题] Gemini API Key 无效或已过期。请检查 GEMINI_API_KEY 环境变量是否正确。` 
-              }, { status: 401 });
-            }
-            
-            // 2. 地理限制（API 地区限制）- 优先检查，因为这是常见的失败原因
-            // 注意：地区限制可能返回 400 状态码和 FAILED_PRECONDITION 状态
-            if (errorMsg.includes('User location is not supported') || 
-                (errorMsg.includes('location') && errorMsg.includes('not supported')) || 
-                errorStatus === 'FAILED_PRECONDITION' ||
-                (errorCode === 400 && errorMsg.includes('location')) ||
-                errorCode === 403) {
-              console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持（${errorMsg}），尝试下一个模型...`);
-              lastError = { type: 'location', model, error: data };
-              lastErrorModel = model;
-              continue;
-            }
-            
-            // 3. 配额问题（API 配额限制）
-            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('free_tier') || errorCode === 429) {
-              console.log(`⚠️ [API 配额问题] Gemini ${model} 配额已用完，尝试下一个模型...`);
-              lastError = { type: 'quota', model, error: data };
-              lastErrorModel = model;
-              continue; // 尝试下一个模型
-            }
-            
-            // 4. 模型不存在问题（模型配置问题）
-            if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model') || errorMsg.includes('is not found for API version') || errorMsg.includes('is not supported') || errorCode === 404) {
-              console.log(`⚠️ [模型问题] Gemini ${model} 模型不存在或不支持，尝试下一个模型...`);
-              lastError = { type: 'model_not_found', model, error: data };
-              lastErrorModel = model;
-              continue; // 尝试下一个模型
-            }
-            
-            // 5. 其他 API 错误
-            console.log(`⚠️ [API 其他错误] Gemini ${model} 调用失败: ${errorMsg}，尝试下一个模型...`);
-            lastError = { type: 'other', model, error: data, message: errorMsg };
-            lastErrorModel = model;
-            continue;
+            continue; // 尝试下一个 API 版本
           }
-        } catch (err: any) {
-          console.error(`❌ [API 网络错误] Gemini ${model} 请求异常:`, err.message);
-          lastError = { type: 'network', model, error: { message: err.message }, raw: err };
-          lastErrorModel = model;
-          continue;
+        }
+        
+        // 如果这个模型成功了，跳出模型循环
+        if (modelSuccess || success) {
+          break;
         }
       }
       
