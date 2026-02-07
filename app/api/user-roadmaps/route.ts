@@ -41,6 +41,10 @@ export async function GET(req: Request) {
 
   } catch (error: any) {
     console.error("❌ 获取用户路线图失败:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 确保总是返回有效的 JSON
+    return NextResponse.json({ 
+      error: error.message || '获取用户路线图失败',
+      roadmaps: [] // 提供默认值，避免前端解析错误
+    }, { status: 500 });
   }
 }

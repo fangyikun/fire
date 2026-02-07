@@ -40,6 +40,10 @@ export async function GET(req: Request) {
 
   } catch (error: any) {
     console.error("❌ 获取用户笔记数量失败:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 确保总是返回有效的 JSON，提供默认值
+    return NextResponse.json({ 
+      error: error.message || '获取笔记数量失败',
+      notesCount: 0 
+    }, { status: 500 });
   }
 }

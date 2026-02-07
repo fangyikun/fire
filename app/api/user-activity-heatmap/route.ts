@@ -53,6 +53,7 @@ export async function GET(req: Request) {
 
   } catch (error: any) {
     console.error("❌ 获取用户活跃度数据失败:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // 确保总是返回有效的 JSON，提供默认值
+    return NextResponse.json([], { status: 500 }); // 返回空数组，避免前端解析错误
   }
 }

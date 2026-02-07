@@ -80,25 +80,38 @@ export default function MissionControl() {
       const roadmapsRes = await fetch('/api/user-roadmaps', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const roadmapsData = await roadmapsRes.json();
-      if (!roadmapsRes.ok) throw new Error(roadmapsData.error);
-      setUserRoadmaps(roadmapsData);
+      if (!roadmapsRes.ok) {
+        const errorData = await roadmapsRes.json().catch(() => ({ error: '获取路线图失败' }));
+        console.warn('获取路线图失败:', errorData.error);
+        setUserRoadmaps([]); // 设置默认值
+      } else {
+        const roadmapsData = await roadmapsRes.json().catch(() => []);
+        setUserRoadmaps(Array.isArray(roadmapsData) ? roadmapsData : (roadmapsData.roadmaps || []));
+      }
 
       // 4. 获取用户笔记数量
       const notesCountRes = await fetch('/api/user-notes-count', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const notesCountData = await notesCountRes.json();
-      if (!notesCountRes.ok) throw new Error(notesCountData.error);
-      setNotesCount(notesCountData.notesCount);
+      if (!notesCountRes.ok) {
+        console.warn('获取笔记数量失败');
+        setNotesCount(0); // 设置默认值
+      } else {
+        const notesCountData = await notesCountRes.json().catch(() => ({ notesCount: 0 }));
+        setNotesCount(notesCountData.notesCount || 0);
+      }
 
       // 5. 获取用户活跃度数据
       const heatmapRes = await fetch('/api/user-activity-heatmap', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const heatmapData = await heatmapRes.json();
-      if (!heatmapRes.ok) throw new Error(heatmapData.error);
-      setHeatmapData(heatmapData);
+      if (!heatmapRes.ok) {
+        console.warn('获取活跃度数据失败');
+        setHeatmapData([]); // 设置默认值
+      } else {
+        const heatmapData = await heatmapRes.json().catch(() => []);
+        setHeatmapData(Array.isArray(heatmapData) ? heatmapData : []);
+      }
 
     } catch (e: any) {
       console.error("仪表盘数据加载失败:", e.message);
