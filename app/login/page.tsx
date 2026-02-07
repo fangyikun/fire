@@ -52,7 +52,7 @@ export default function LoginPage() {
         if (!hasUrl || !hasKey) {
           setMessage({ 
             type: 'error', 
-            text: '配置错误：Supabase 环境变量未设置。请在 Vercel 项目设置中配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY。' 
+            text: '配置错误：Supabase 环境变量未设置。请访问 /help/vercel-setup 查看详细配置步骤。' 
           })
         } else {
           setMessage({ 
