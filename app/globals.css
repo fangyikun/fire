@@ -1,26 +1,55 @@
+/* 使用最新的 CSS 导入方式，或者干脆原生处理 */
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* 定义莫兰迪深色系的核心色值 */
+  --color-bg: #1A1A1A;
+  --color-paper: #DCD7C9;
+  --color-sage: #8E9775;
+  --color-border: #2C2C2C;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* 即使插件报未知指令，我们也可以通过这种方式绕过限制 */
+@layer base {
+  html {
+    background-color: var(--color-bg);
+    color: var(--color-paper);
+    /* 2026 年推荐的字体渲染平滑技术 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    margin: 0;
+    padding: 0;
+    /* 设置一个默认的、带有文学气息的衬线体 */
+    font-family: "Playfair Display", "Times New Roman", serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* 专门为文艺风格定制的极细边框和过渡 */
+.border-thin {
+  border-width: 0.5px;
+  border-color: var(--color-border);
+}
+
+.transition-soft {
+  transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 隐藏烦人的滚动条，或者让它变得极细 */
+::-webkit-scrollbar {
+  width: 3px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 10px;
+}
+
+textarea {
+  border-width: 2px;
+  border-color: var(--color-sage);
+  outline: none;
+  resize: vertical; /* Allow vertical resizing */
 }
