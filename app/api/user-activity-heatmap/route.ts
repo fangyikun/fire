@@ -44,11 +44,22 @@ export async function GET(req: Request) {
 
     // 返回热力图所需的数据格式
     // { date: "YYYY-MM-DD", count: N }
-    const formattedData = activityData?.map(item => ({
-      date: item.activity_date,
-      count: item.count
-    })) || [];
+    const formattedData = activityData?.map(item => {
+      // 确保日期格式为 YYYY-MM-DD
+      let dateStr = item.activity_date;
+      if (dateStr instanceof Date) {
+        dateStr = dateStr.toISOString().split('T')[0];
+      } else if (typeof dateStr === 'string' && dateStr.includes('T')) {
+        dateStr = dateStr.split('T')[0];
+      }
+      
+      return {
+        date: dateStr,
+        count: Number(item.count) || 0
+      };
+    }) || [];
 
+    console.log('热力图数据:', formattedData.length, '条记录');
     return NextResponse.json(formattedData);
 
   } catch (error: any) {

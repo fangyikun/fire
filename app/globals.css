@@ -57,6 +57,12 @@ textarea {
 /* Calendar Heatmap 样式 */
 .react-calendar-heatmap {
   width: 100%;
+  height: auto;
+}
+
+.react-calendar-heatmap svg {
+  width: 100%;
+  height: auto;
 }
 
 .react-calendar-heatmap .color-empty {
@@ -88,11 +94,24 @@ textarea {
 .react-calendar-heatmap rect {
   rx: 2;
   ry: 2;
+  stroke: #1E1E1E;
+  stroke-width: 1;
 }
 
 .react-calendar-heatmap text {
-  font-size: 8px;
+  font-size: 9px;
   fill: #666;
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+.react-calendar-heatmap .react-calendar-heatmap-month-label {
+  fill: #666;
+  font-size: 10px;
+}
+
+.react-calendar-heatmap .react-calendar-heatmap-weekday-label {
+  fill: #666;
+  font-size: 9px;
 }
 
 /* 字体工具类 */

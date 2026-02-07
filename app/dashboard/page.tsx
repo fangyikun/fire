@@ -126,11 +126,15 @@ export default function MissionControl() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!heatmapRes.ok) {
-        console.warn('获取活跃度数据失败');
+        console.warn('获取活跃度数据失败:', heatmapRes.status, heatmapRes.statusText);
         setHeatmapData([]); // 设置默认值
       } else {
         const heatmapData = await heatmapRes.json().catch(() => []);
-        setHeatmapData(Array.isArray(heatmapData) ? heatmapData : []);
+        const validData = Array.isArray(heatmapData) 
+          ? heatmapData.filter((item: any) => item && item.date) 
+          : [];
+        console.log('热力图数据:', validData.length, '条记录');
+        setHeatmapData(validData);
       }
 
     } catch (e: any) {
@@ -229,23 +233,27 @@ export default function MissionControl() {
               <Clock size={16} className="opacity-50" />
               <span className="text-[10px] tracking-[0.4em] uppercase">Activity Heatmap</span>
             </div>
-            <div className="border border-[#2C2C2C] p-6 rounded-lg bg-[#1E1E1E]">
+            <div className="border border-[#2C2C2C] p-6 rounded-lg bg-[#1E1E1E] overflow-x-auto">
               {heatmapData.length > 0 ? (
-                <CalendarHeatmap
-                  startDate={subYears(new Date(), 1)}
-                  endDate={new Date()}
-                  values={heatmapData.map((item: any) => ({
-                    date: item.date,
-                    count: item.count || 0
-                  }))}
-                  classForValue={(value: any) => {
-                    if (!value) return 'color-empty'
-                    if (value.count === 0) return 'color-scale-0'
-                    if (value.count <= 2) return 'color-scale-1'
-                    if (value.count <= 4) return 'color-scale-2'
-                    return 'color-scale-3'
-                  }}
-                />
+                <div className="min-w-[800px]">
+                  <CalendarHeatmap
+                    startDate={subYears(new Date(), 1)}
+                    endDate={new Date()}
+                    values={heatmapData.map((item: any) => ({
+                      date: typeof item.date === 'string' ? item.date : new Date(item.date).toISOString().split('T')[0],
+                      count: Number(item.count) || 0
+                    }))}
+                    classForValue={(value: any) => {
+                      if (!value || value.count === undefined) return 'color-empty'
+                      if (value.count === 0) return 'color-scale-0'
+                      if (value.count <= 2) return 'color-scale-1'
+                      if (value.count <= 4) return 'color-scale-2'
+                      return 'color-scale-3'
+                    }}
+                    showWeekdayLabels={true}
+                    showOutOfRangeDays={false}
+                  />
+                </div>
               ) : (
                 <div className="text-center py-12 text-[#666] text-sm italic">
                   No activity data yet
