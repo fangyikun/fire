@@ -37,29 +37,47 @@ export default function LoginPage() {
 
   // 检查 Supabase 客户端是否初始化成功
   useEffect(() => {
-    if (typeof window !== 'undefined' && !supabase) {
+    if (typeof window !== 'undefined') {
       const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
       const hasKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!hasUrl || !hasKey) {
-        console.warn('Supabase environment variables missing. Please check your .env.local file.')
+      
+      if (!supabase) {
+        console.error('Supabase client initialization failed:', {
+          hasUrl,
+          hasKey,
+          url: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...',
+          keyPrefix: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 10) + '...'
+        })
+        
+        if (!hasUrl || !hasKey) {
+          setMessage({ 
+            type: 'error', 
+            text: '配置错误：Supabase 环境变量未设置。请在 Vercel 项目设置中配置 NEXT_PUBLIC_SUPABASE_URL 和 NEXT_PUBLIC_SUPABASE_ANON_KEY。' 
+          })
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: 'Supabase 客户端初始化失败。请刷新页面或联系管理员。' 
+          })
+        }
       }
-    }
-    
-    // 检查 URL 中的错误参数
-    const urlParams = new URLSearchParams(window.location.search)
-    const error = urlParams.get('error')
-    if (error) {
-      const errorMessages: Record<string, string> = {
-        config: 'Supabase 配置错误，请检查环境变量',
-        auth: '认证失败，请重试',
-        callback: '回调处理失败，请重新登录'
+      
+      // 检查 URL 中的错误参数
+      const urlParams = new URLSearchParams(window.location.search)
+      const error = urlParams.get('error')
+      if (error) {
+        const errorMessages: Record<string, string> = {
+          config: 'Supabase 配置错误，请检查环境变量',
+          auth: '认证失败，请重试',
+          callback: '回调处理失败，请重新登录'
+        }
+        setMessage({ 
+          type: 'error', 
+          text: errorMessages[error] || '发生错误，请重试' 
+        })
+        // 清除 URL 参数
+        window.history.replaceState({}, '', '/login')
       }
-      setMessage({ 
-        type: 'error', 
-        text: errorMessages[error] || '发生错误，请重试' 
-      })
-      // 清除 URL 参数
-      window.history.replaceState({}, '', '/login')
     }
   }, [supabase])
 
