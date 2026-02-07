@@ -24,7 +24,7 @@
     margin: 0;
     padding: 0;
     /* 设置一个默认的、带有文学气息的衬线体 */
-    font-family: "Playfair Display", "Times New Roman", serif;
+    font-family: var(--font-playfair), "Playfair Display", "Times New Roman", serif;
   }
 }
 
@@ -93,4 +93,25 @@ textarea {
 .react-calendar-heatmap text {
   font-size: 8px;
   fill: #666;
+}
+
+/* 字体工具类 */
+.font-elegant {
+  font-family: var(--font-playfair), "Playfair Display", serif;
+}
+
+.font-literary {
+  font-family: var(--font-playfair), "Playfair Display", serif;
+}
+
+.font-chinese-handwriting {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-style: normal;
+}
+
+/* 确保字体平滑渲染 */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
