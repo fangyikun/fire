@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { Loader2, ArrowRight, ShieldCheck, Mail } from 'lucide-react'
@@ -18,15 +18,45 @@ export default function LoginPage() {
     if (typeof window === 'undefined') return null
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    return supabaseUrl && supabaseAnonKey 
-      ? createBrowserClient(supabaseUrl, supabaseAnonKey)
-      : null
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Supabase environment variables are missing:', {
+        hasUrl: !!supabaseUrl,
+        hasKey: !!supabaseAnonKey
+      })
+      return null
+    }
+    
+    try {
+      return createBrowserClient(supabaseUrl, supabaseAnonKey)
+    } catch (error) {
+      console.error('Failed to create Supabase client:', error)
+      return null
+    }
   }, [])
+
+  // 检查 Supabase 客户端是否初始化成功
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !supabase) {
+      const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+      const hasKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!hasUrl || !hasKey) {
+        console.warn('Supabase environment variables missing. Please check your .env.local file.')
+      }
+    }
+  }, [supabase])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supabase) {
-      setMessage({ type: 'error', text: 'Supabase client not initialized' })
+      const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+      const hasKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      setMessage({ 
+        type: 'error', 
+        text: hasUrl && hasKey 
+          ? 'Supabase client initialization failed. Please refresh the page.'
+          : 'Supabase configuration is missing. Please check your environment variables.'
+      })
       return
     }
     setLoading(true)
