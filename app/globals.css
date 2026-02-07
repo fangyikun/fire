@@ -128,7 +128,7 @@ textarea {
 }
 
 .font-chinese-handwriting {
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-noto-serif-sc), "Noto Serif SC", "STSong", "SimSun", serif !important;
   font-style: normal;
   font-weight: 400;
 }
