@@ -25,13 +25,15 @@ export default function Home() {
   const headerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
 
   const fetchRoadmaps = async () => {
+    if (!supabase) return
     // 只获取公开的roadmaps，关联查询用户信息
     const { data } = await supabase
       .from('roadmaps')
@@ -48,6 +50,7 @@ export default function Home() {
     fetchRoadmaps()
     // 检查当前登录用户
     async function checkUser() {
+      if (!supabase) return
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         setCurrentUser(user)
@@ -134,7 +137,7 @@ export default function Home() {
   }, [])
 
   const createAIRoadmap = async () => {
-    if (!topic) return
+    if (!topic || !supabase) return
     setGenerating(true)
     try {
       const { data: { session } } = await supabase.auth.getSession();

@@ -13,13 +13,18 @@ export default function LoginPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
   const router = useRouter()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!supabase) {
+      setMessage({ type: 'error', text: 'Supabase client not initialized' })
+      return
+    }
     setLoading(true)
     setMessage(null)
     
