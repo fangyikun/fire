@@ -25,6 +25,8 @@
     padding: 0;
     /* 设置一个默认的、带有文学气息的衬线体 */
     font-family: var(--font-playfair), "Playfair Display", "Times New Roman", serif;
+    font-weight: 400;
+    font-style: normal;
   }
 }
 
@@ -116,20 +118,33 @@ textarea {
 
 /* 字体工具类 */
 .font-elegant {
-  font-family: var(--font-playfair), "Playfair Display", serif;
+  font-family: var(--font-playfair), "Playfair Display", serif !important;
+  font-weight: 300;
 }
 
 .font-literary {
-  font-family: var(--font-playfair), "Playfair Display", serif;
+  font-family: var(--font-playfair), "Playfair Display", serif !important;
+  font-weight: 400;
 }
 
 .font-chinese-handwriting {
   font-family: var(--font-geist-sans), sans-serif;
   font-style: normal;
+  font-weight: 400;
 }
 
-/* 确保字体平滑渲染 */
-* {
+/* 确保主页使用文艺字体 */
+main {
+  font-family: var(--font-playfair), "Playfair Display", serif;
+}
+
+/* 确保所有文本元素默认使用文艺字体 */
+.page-content {
+  font-family: var(--font-playfair), "Playfair Display", serif;
+}
+
+/* 确保字体平滑渲染 - 只应用于文本元素，避免影响所有元素 */
+body, p, h1, h2, h3, h4, h5, h6, span, div, a, button, input, textarea, label {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
