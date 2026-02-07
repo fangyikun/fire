@@ -107,13 +107,6 @@ export default function MissionControl() {
     router.refresh();
   };
 
-  const handleSignOut = async () => {
-    setIsLoggingOut(true)
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
-
   if (loading || isLoggingOut) return (
     <div className="bg-[#1A1A1A] min-h-screen flex flex-col items-center justify-center text-[#8E9775] font-serif tracking-[0.5em] italic gap-4">
       <Loader2 className="animate-spin opacity-20" size={24} />
@@ -169,7 +162,7 @@ export default function MissionControl() {
         </header>
 
         {/* 陈列架部分 */}
-        {challenges.length === 0 ? (
+        {filteredRoadmaps.length === 0 ? (
           <div className="h-96 border border-[#2C2C2C] border-dashed rounded-lg flex flex-col items-center justify-center space-y-8 group">
             <Compass className="w-12 h-12 text-[#2C2C2C] group-hover:text-[#8E9775] transition-colors duration-1000" />
             <div className="text-center space-y-2">
@@ -179,7 +172,7 @@ export default function MissionControl() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-28">
-            {challenges.map((item, index) => (
+            {filteredRoadmaps.map((item, index) => (
               <div key={item.id} className="group relative">
                 <span className="absolute -top-12 -left-6 text-[10rem] font-black text-[#2C2C2C]/20 pointer-events-none select-none group-hover:text-[#8E9775]/5 transition-colors duration-1000">
                   {index + 1}
@@ -191,25 +184,23 @@ export default function MissionControl() {
                     
                     <div className="space-y-6">
                       <h2 className="text-3xl font-light leading-tight text-white group-hover:italic transition-all duration-700">
-                        {item.roadmaps?.title}
+                        {item.title}
                       </h2>
                       <p className="text-[#666] text-xs leading-relaxed italic line-clamp-4 font-sans opacity-0 group-hover:opacity-100 transition-all duration-700 delay-100">
-                        {item.roadmaps?.description}
+                        {item.description}
                       </p>
                     </div>
 
                     <div className="pt-8 border-t border-[#2C2C2C] flex justify-between items-end">
                       <div className="space-y-3">
-                        <span className="block text-[8px] uppercase tracking-[0.5em] text-[#8E9775] opacity-50">Current Phase</span>
-                        <div className="flex gap-1.5">
-                           {[...Array(5)].map((_, i) => (
-                             <div key={i} className={`h-[1px] w-5 transition-all duration-1000 ${i < (item.current_step || 1) ? 'bg-[#8E9775] w-8' : 'bg-[#333]'}`} />
-                           ))}
+                        <span className="block text-[8px] uppercase tracking-[0.5em] text-[#8E9775] opacity-50">Category</span>
+                        <div className="text-[10px] uppercase tracking-wider text-[#8E9775]">
+                          {item.category}
                         </div>
                       </div>
                       
                       <Link 
-                        href={`/challenge/${item.id}`}
+                        href={`/roadmap/${item.id}`}
                         className="w-14 h-14 rounded-full border border-[#DCD7C9]/10 flex items-center justify-center hover:bg-[#DCD7C9] hover:text-black transition-all duration-700 transform hover:scale-110 active:scale-90 shadow-xl"
                       >
                         <ArrowUpRight size={20} />
