@@ -44,6 +44,23 @@ export default function LoginPage() {
         console.warn('Supabase environment variables missing. Please check your .env.local file.')
       }
     }
+    
+    // 检查 URL 中的错误参数
+    const urlParams = new URLSearchParams(window.location.search)
+    const error = urlParams.get('error')
+    if (error) {
+      const errorMessages: Record<string, string> = {
+        config: 'Supabase 配置错误，请检查环境变量',
+        auth: '认证失败，请重试',
+        callback: '回调处理失败，请重新登录'
+      }
+      setMessage({ 
+        type: 'error', 
+        text: errorMessages[error] || '发生错误，请重试' 
+      })
+      // 清除 URL 参数
+      window.history.replaceState({}, '', '/login')
+    }
   }, [supabase])
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -65,7 +82,7 @@ export default function LoginPage() {
     try {
       if (isSignUp) {
         // 注册逻辑
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -73,7 +90,38 @@ export default function LoginPage() {
           },
         })
         if (error) throw error
-        setMessage({ type: 'success', text: '档案已初步建立。请检查邮箱确认链接（若未开启验证则可直接尝试登录）。' })
+        
+        // 如果注册成功且用户已登录（邮箱验证未启用的情况）
+        if (data.user && data.session) {
+          // 尝试创建用户 profile
+          try {
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: data.user.id,
+                username: email.split('@')[0],
+                email: email,
+              }, {
+                onConflict: 'id'
+              })
+            
+            if (profileError) {
+              console.warn('Profile creation failed:', profileError)
+            }
+          } catch (profileErr) {
+            console.warn('Profile creation error:', profileErr)
+          }
+          
+          // 直接跳转到 dashboard
+          router.push('/dashboard')
+          router.refresh()
+        } else {
+          // 需要邮箱验证
+          setMessage({ 
+            type: 'success', 
+            text: '注册成功！请检查邮箱并点击确认链接以完成注册。' 
+          })
+        }
       } else {
         // 登录逻辑
         const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -82,7 +130,11 @@ export default function LoginPage() {
         router.refresh()
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || '操作失败，请检查凭据。' })
+      console.error('Auth error:', err)
+      setMessage({ 
+        type: 'error', 
+        text: err.message || '操作失败，请检查凭据。' 
+      })
     } finally {
       setLoading(false)
     }
