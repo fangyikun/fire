@@ -25,12 +25,18 @@ export default function MissionControl() {
   : userRoadmaps.filter(r => r.category === activeTab);
   
   const router = useRouter()
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabase = supabaseUrl && supabaseAnonKey 
+    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+    : null
 
   const fetchUserData = useCallback(async () => {
+    if (!supabase) {
+      console.error('Supabase client not initialized')
+      router.push('/login')
+      return
+    }
     setLoading(true);
     try {
       // 1. 获取当前用户信息
@@ -101,6 +107,7 @@ export default function MissionControl() {
   }, [fetchUserData]);
 
   const handleSignOut = async () => {
+    if (!supabase) return
     setIsLoggingOut(true);
     await supabase.auth.signOut();
     router.push('/login');
