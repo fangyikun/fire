@@ -179,11 +179,14 @@ export async function POST(req: Request) {
       
       // 智能尝试不同的 Gemini 模型
       let lastError: any = null;
+      let lastErrorModel = '';
       let success = false;
       
       for (const model of geminiModels) {
         try {
           const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+          
+          console.log(`🔄 尝试 Gemini 模型: ${model}`);
           
           response = await fetch(modelUrl, {
             method: "POST",
@@ -191,50 +194,85 @@ export async function POST(req: Request) {
             body: JSON.stringify(payload)
           });
           
-          data = await response.json();
+          // 检查响应状态
+          const responseText = await response.text();
+          let responseData: any;
+          
+          try {
+            responseData = JSON.parse(responseText);
+          } catch (parseErr) {
+            console.error(`❌ Gemini ${model} 响应解析失败:`, responseText.substring(0, 200));
+            lastError = { error: { message: `响应格式错误: ${responseText.substring(0, 100)}` } };
+            lastErrorModel = model;
+            continue;
+          }
+          
+          data = responseData;
           
           if (response.ok) {
             // 成功！使用这个模型
-            console.log(`✅ 成功使用 Gemini 模型: ${model}`);
-            rawText = data.candidates[0].content.parts[0].text;
-            success = true;
-            break;
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+              console.log(`✅ 成功使用 Gemini 模型: ${model}`);
+              rawText = data.candidates[0].content.parts[0].text;
+              success = true;
+              break;
+            } else {
+              console.error(`❌ Gemini ${model} 响应格式异常:`, JSON.stringify(data).substring(0, 200));
+              lastError = { error: { message: '响应格式异常，缺少 candidates 数据' } };
+              lastErrorModel = model;
+              continue;
+            }
           } else {
             // 检查错误类型
-            const errorMsg = data.error?.message || '';
+            const errorMsg = data.error?.message || data.error || JSON.stringify(data).substring(0, 200);
+            console.error(`❌ Gemini ${model} 调用失败:`, errorMsg);
             
-            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit')) {
+            if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429')) {
               console.log(`⚠️ Gemini ${model} 配额已用完，尝试下一个模型...`);
               lastError = data;
+              lastErrorModel = model;
               continue; // 尝试下一个模型
-            } else if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found')) {
-              console.log(`⚠️ Gemini ${model} 不可用，尝试下一个模型...`);
+            } else if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model')) {
+              console.log(`⚠️ Gemini ${model} 模型不存在，尝试下一个模型...`);
               lastError = data;
+              lastErrorModel = model;
               continue; // 尝试下一个模型
-            } else if (errorMsg.includes('location') || errorMsg.includes('not supported')) {
+            } else if (errorMsg.includes('location') || errorMsg.includes('not supported') || errorMsg.includes('403')) {
               // 地理限制，也尝试下一个
               console.log(`⚠️ Gemini ${model} 地区不支持，尝试下一个模型...`);
               lastError = data;
+              lastErrorModel = model;
               continue;
+            } else if (errorMsg.includes('API key') || errorMsg.includes('Invalid API key') || errorMsg.includes('401')) {
+              // API Key 错误，不应该继续尝试
+              console.error(`❌ API Key 无效，停止尝试`);
+              return NextResponse.json({ 
+                error: `模型调用异常: API Key 无效或已过期。请检查 GEMINI_API_KEY 环境变量。` 
+              }, { status: 401 });
             } else {
               // 其他错误，也尝试下一个
               console.log(`⚠️ Gemini ${model} 调用失败: ${errorMsg}，尝试下一个模型...`);
               lastError = data;
+              lastErrorModel = model;
               continue;
             }
           }
         } catch (err: any) {
-          console.log(`⚠️ Gemini ${model} 请求异常: ${err.message}，尝试下一个模型...`);
-          lastError = err;
+          console.error(`❌ Gemini ${model} 请求异常:`, err.message);
+          lastError = { error: { message: err.message }, raw: err };
+          lastErrorModel = model;
           continue;
         }
       }
       
       if (!success) {
         // 所有 Gemini 模型都失败了
-        const errorMsg = lastError?.error?.message || lastError?.message || '所有 Gemini 模型都不可用';
+        const errorDetails = lastError?.error?.message || lastError?.message || JSON.stringify(lastError).substring(0, 200) || '所有 Gemini 模型都不可用';
+        const triedModels = geminiModels.join(', ');
+        console.error(`❌ 所有 Gemini 模型都失败。最后尝试的模型: ${lastErrorModel}，错误: ${errorDetails}`);
+        
         return NextResponse.json({ 
-          error: `模型调用异常: ${errorMsg}。已尝试所有可用的 Gemini 模型（${geminiModels.join(', ')}）。建议配置其他 AI 提供商（Groq、OpenRouter 等）。` 
+          error: `模型调用异常: ${errorDetails}。已尝试所有 Gemini 模型（${triedModels}）。最后失败的模型: ${lastErrorModel}。请检查 API Key 是否正确，或配置其他 AI 提供商（Groq、OpenRouter 等）。` 
         }, { status: 500 });
       }
     } else if (provider === 'huggingface') {
