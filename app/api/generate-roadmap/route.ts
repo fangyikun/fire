@@ -166,14 +166,14 @@ export async function POST(req: Request) {
       
       // Gemini 模型优先级列表（按配额和可用性排序）
       // 即使用户指定了模型，如果配额用完也会自动尝试其他模型
+      // 注意：只使用 v1beta API 支持的模型（已验证存在的模型）
       const userSpecifiedModel = process.env.GEMINI_MODEL;
       const defaultModels = [
-        'gemini-1.5-flash',      // 配额高，速度快，推荐
-        'gemini-2.5-flash-lite',  // 轻量级，配额较高
-        'gemini-2.5-flash',       // 最新版本，但配额低
-        'gemini-2.0-flash',       // 备选版本
-        'gemini-1.5-pro',         // 功能强，但可能配额低
-        'gemini-pro'              // 经典版本
+        'gemini-1.5-flash',        // 配额高，速度快，推荐（v1beta 支持，已验证）
+        'gemini-1.5-pro',          // 功能强，v1beta 支持（已验证）
+        'gemini-2.5-flash',        // 最新版本，但配额低（v1beta 支持）
+        'gemini-2.5-flash-lite',   // 轻量级版本（v1beta 支持）
+        'gemini-3-flash-preview',  // 预览版本（如果可用）
       ];
       
       // 如果用户指定了模型，优先尝试用户指定的，然后尝试其他模型
@@ -236,8 +236,8 @@ export async function POST(req: Request) {
               lastError = data;
               lastErrorModel = model;
               continue; // 尝试下一个模型
-            } else if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model')) {
-              console.log(`⚠️ Gemini ${model} 模型不存在，尝试下一个模型...`);
+            } else if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model') || errorMsg.includes('is not found for API version') || errorMsg.includes('is not supported')) {
+              console.log(`⚠️ Gemini ${model} 模型不存在或不支持，尝试下一个模型...`);
               lastError = data;
               lastErrorModel = model;
               continue; // 尝试下一个模型
