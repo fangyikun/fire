@@ -39,13 +39,10 @@ export default function Home() {
   const fetchRoadmaps = async () => {
     if (!supabase) return
     try {
-      // 只获取公开的roadmaps，关联查询用户信息
+      // 只获取公开的roadmaps，不关联查询 profiles（避免 400 错误）
       const { data, error } = await supabase
         .from('roadmaps')
-        .select(`
-          *,
-          profiles:user_id (id, username)
-        `)
+        .select('*')
         .eq('is_public', true)
         .order('created_at', { ascending: false })
       

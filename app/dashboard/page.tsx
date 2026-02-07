@@ -84,13 +84,29 @@ export default function MissionControl() {
       const roadmapsRes = await fetch('/api/user-roadmaps', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
       if (!roadmapsRes.ok) {
-        const errorData = await roadmapsRes.json().catch(() => ({ error: '获取路线图失败' }));
-        console.warn('获取路线图失败:', errorData.error);
+        // 尝试解析错误响应
+        let errorData;
+        try {
+          const text = await roadmapsRes.text();
+          errorData = text ? JSON.parse(text) : { error: '获取路线图失败' };
+        } catch {
+          errorData = { error: '获取路线图失败' };
+        }
+        console.warn('获取路线图失败:', errorData.error || roadmapsRes.statusText);
         setUserRoadmaps([]); // 设置默认值
       } else {
-        const roadmapsData = await roadmapsRes.json().catch(() => []);
-        setUserRoadmaps(Array.isArray(roadmapsData) ? roadmapsData : (roadmapsData.roadmaps || []));
+        // 尝试解析成功响应
+        let roadmapsData;
+        try {
+          const text = await roadmapsRes.text();
+          roadmapsData = text ? JSON.parse(text) : [];
+        } catch (parseError) {
+          console.error('解析路线图数据失败:', parseError);
+          roadmapsData = [];
+        }
+        setUserRoadmaps(Array.isArray(roadmapsData) ? roadmapsData : (roadmapsData?.roadmaps || []));
       }
 
       // 4. 获取用户笔记数量
