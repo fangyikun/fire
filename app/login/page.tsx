@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { useRouter } from 'next/navigation'
 import { Loader2, ArrowRight, ShieldCheck, Mail } from 'lucide-react'
@@ -13,11 +13,15 @@ export default function LoginPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
   const router = useRouter()
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const supabase = supabaseUrl && supabaseAnonKey 
-    ? createBrowserClient(supabaseUrl, supabaseAnonKey)
-    : null
+  // 使用 useMemo 延迟创建客户端，避免构建时执行
+  const supabase = useMemo(() => {
+    if (typeof window === 'undefined') return null
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    return supabaseUrl && supabaseAnonKey 
+      ? createBrowserClient(supabaseUrl, supabaseAnonKey)
+      : null
+  }, [])
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
