@@ -44,7 +44,7 @@ export default function ChallengePage() {
   }, [params.id, supabase])
 
   const handleComplete = async () => {
-    if (updating) return
+    if (updating || !supabase) return
     setUpdating(true)
     const nextStep = (progress.current_step || 1) + 1
     
