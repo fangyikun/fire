@@ -230,8 +230,9 @@ export async function POST(req: Request) {
             // 检查错误类型，明确区分是模型问题还是 API 问题
             const errorMsg = data.error?.message || data.error || JSON.stringify(data).substring(0, 200);
             const errorCode = data.error?.code || response.status;
+            const errorStatus = data.error?.status || '';
             
-            console.error(`❌ Gemini ${model} 调用失败 [状态码: ${errorCode}]:`, errorMsg);
+            console.error(`❌ Gemini ${model} 调用失败 [状态码: ${errorCode}, 状态: ${errorStatus}]:`, errorMsg);
             
             // 1. API Key 问题（API 配置问题）
             if (errorMsg.includes('API key') || errorMsg.includes('Invalid API key') || errorMsg.includes('401') || errorCode === 401) {
@@ -241,7 +242,20 @@ export async function POST(req: Request) {
               }, { status: 401 });
             }
             
-            // 2. 配额问题（API 配额限制）
+            // 2. 地理限制（API 地区限制）- 优先检查，因为这是常见的失败原因
+            // 注意：地区限制可能返回 400 状态码和 FAILED_PRECONDITION 状态
+            if (errorMsg.includes('User location is not supported') || 
+                (errorMsg.includes('location') && errorMsg.includes('not supported')) || 
+                errorStatus === 'FAILED_PRECONDITION' ||
+                (errorCode === 400 && errorMsg.includes('location')) ||
+                errorCode === 403) {
+              console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持（${errorMsg}），尝试下一个模型...`);
+              lastError = { type: 'location', model, error: data };
+              lastErrorModel = model;
+              continue;
+            }
+            
+            // 3. 配额问题（API 配额限制）
             if (errorMsg.includes('quota') || errorMsg.includes('Quota exceeded') || errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('free_tier') || errorCode === 429) {
               console.log(`⚠️ [API 配额问题] Gemini ${model} 配额已用完，尝试下一个模型...`);
               lastError = { type: 'quota', model, error: data };
@@ -249,20 +263,12 @@ export async function POST(req: Request) {
               continue; // 尝试下一个模型
             }
             
-            // 3. 模型不存在问题（模型配置问题）
+            // 4. 模型不存在问题（模型配置问题）
             if (errorMsg.includes('not found') || errorMsg.includes('404') || errorMsg.includes('Model not found') || errorMsg.includes('Invalid model') || errorMsg.includes('is not found for API version') || errorMsg.includes('is not supported') || errorCode === 404) {
               console.log(`⚠️ [模型问题] Gemini ${model} 模型不存在或不支持，尝试下一个模型...`);
               lastError = { type: 'model_not_found', model, error: data };
               lastErrorModel = model;
               continue; // 尝试下一个模型
-            }
-            
-            // 4. 地理限制（API 地区限制）- 优先检查，因为这是常见的失败原因
-            if (errorMsg.includes('User location is not supported') || errorMsg.includes('location') && errorMsg.includes('not supported') || errorMsg.includes('403') || errorCode === 403 || errorCode === 400 && errorMsg.includes('location')) {
-              console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持（${errorMsg}），尝试下一个模型...`);
-              lastError = { type: 'location', model, error: data };
-              lastErrorModel = model;
-              continue;
             }
             
             // 5. 其他 API 错误
