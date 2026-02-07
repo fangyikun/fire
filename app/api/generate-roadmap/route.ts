@@ -173,7 +173,7 @@ export async function POST(req: Request) {
         'gemini-1.5-pro',          // 功能强，v1beta 支持（已验证）
         'gemini-2.5-flash',        // 最新版本，但配额低（v1beta 支持）
         'gemini-2.5-flash-lite',   // 轻量级版本（v1beta 支持）
-        'gemini-3-flash-preview',  // 预览版本（如果可用）
+        // 注意：gemini-3-flash-preview 在某些地区不可用，已移除
       ];
       
       // 如果用户指定了模型，优先尝试用户指定的，然后尝试其他模型
@@ -257,9 +257,9 @@ export async function POST(req: Request) {
               continue; // 尝试下一个模型
             }
             
-            // 4. 地理限制（API 地区限制）
-            if (errorMsg.includes('location') || errorMsg.includes('not supported') || errorMsg.includes('403') || errorCode === 403) {
-              console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持，尝试下一个模型...`);
+            // 4. 地理限制（API 地区限制）- 优先检查，因为这是常见的失败原因
+            if (errorMsg.includes('User location is not supported') || errorMsg.includes('location') && errorMsg.includes('not supported') || errorMsg.includes('403') || errorCode === 403 || errorCode === 400 && errorMsg.includes('location')) {
+              console.log(`⚠️ [API 地区限制] Gemini ${model} 地区不支持（${errorMsg}），尝试下一个模型...`);
               lastError = { type: 'location', model, error: data };
               lastErrorModel = model;
               continue;
@@ -296,7 +296,7 @@ export async function POST(req: Request) {
           errorSuggestion = `模型 ${lastErrorModel} 不存在或不支持。已尝试的模型：${triedModels}。建议：1) 检查模型名称是否正确，2) 某些模型可能在某些地区不可用，3) 配置其他 AI 提供商。`;
         } else if (errorType === 'location') {
           errorCategory = '[API 地区限制]';
-          errorSuggestion = '您所在的地区可能不支持 Gemini API。建议：1) 检查网络设置，2) 使用 VPN，3) 配置其他 AI 提供商。';
+          errorSuggestion = `您所在的地区不支持 Gemini API（错误：${errorDetails}）。已尝试所有模型都遇到地区限制。建议：1) 配置其他 AI 提供商（Groq、OpenRouter 等，这些通常没有地区限制），2) 使用 VPN 后重试，3) 联系 Google Cloud 支持了解地区限制详情。`;
         } else {
           errorCategory = '[API 调用问题]';
           errorSuggestion = `API 调用失败。最后失败的模型: ${lastErrorModel}。建议：1) 检查 GEMINI_API_KEY 是否正确，2) 检查网络连接，3) 配置其他 AI 提供商。`;
