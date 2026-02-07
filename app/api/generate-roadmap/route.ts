@@ -2,9 +2,52 @@ import { NextResponse } from "next/server";
 import { createClient } from '@supabase/supabase-js'; // Import createClient from supabase-js
 // Removed: import { cookies } from 'next/headers'; // No longer needed for this approach
 
+// 支持的 AI 提供商类型
+type AIProvider = 'gemini' | 'groq' | 'openrouter' | 'deepseek' | 'huggingface';
+
 export async function POST(req: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "Key 没找到" }, { status: 500 });
+  // 优先使用环境变量指定的提供商，默认为 groq
+  const provider: AIProvider = (process.env.AI_PROVIDER as AIProvider) || 'groq';
+  
+  // 根据提供商获取对应的 API Key
+  let apiKey: string | undefined;
+  let apiUrl: string;
+  let modelName: string;
+  
+  switch (provider) {
+    case 'groq':
+      apiKey = process.env.GROQ_API_KEY;
+      apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+      modelName = 'llama-3.3-70b-versatile'; // 或 'mixtral-8x7b-32768'
+      break;
+    case 'openrouter':
+      apiKey = process.env.OPENROUTER_API_KEY;
+      apiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+      modelName = 'meta-llama/llama-3.1-70b-instruct:free'; // 免费模型
+      break;
+    case 'deepseek':
+      apiKey = process.env.DEEPSEEK_API_KEY;
+      apiUrl = 'https://api.deepseek.com/v1/chat/completions';
+      modelName = 'deepseek-chat';
+      break;
+    case 'huggingface':
+      apiKey = process.env.HUGGINGFACE_API_KEY;
+      apiUrl = `https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-70B-Instruct`;
+      modelName = 'meta-llama/Llama-3.1-70B-Instruct';
+      break;
+    case 'gemini':
+    default:
+      apiKey = process.env.GEMINI_API_KEY;
+      apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+      modelName = 'gemini-2.5-flash';
+      break;
+  }
+  
+  if (!apiKey && provider !== 'gemini') {
+    return NextResponse.json({ 
+      error: `${provider.toUpperCase()} API Key 未配置。请在环境变量中设置 ${provider.toUpperCase()}_API_KEY` 
+    }, { status: 500 });
+  }
 
   // Initialize Supabase client for the backend
   const supabase = createClient(
@@ -79,53 +122,133 @@ export async function POST(req: Request) {
       }
     `;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-    const payload = {
-      contents: [{ parts: [{ text: systemPrompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json", // ✅ 强制模型返回 JSON 格式
-      }
-    };
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Google API 报错:", data);
-      const errorMessage = data.error?.message || '未知错误';
+    // 根据不同的提供商构建请求
+    let response: Response;
+    let data: any;
+    let rawText: string;
+    
+    if (provider === 'gemini') {
+      // Gemini API 格式
+      const payload = {
+        contents: [{ parts: [{ text: systemPrompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      };
       
-      // 处理地理限制错误
-      if (errorMessage.includes('location') || errorMessage.includes('not supported')) {
-        return NextResponse.json({ 
-          error: '模型调用异常: 您所在的地区暂不支持此服务。请检查您的网络设置或联系管理员。' 
-        }, { status: 403 });
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      
+      data = await response.json();
+      
+      if (!response.ok) {
+        console.error("Gemini API 报错:", data);
+        const errorMessage = data.error?.message || '未知错误';
+        
+        if (errorMessage.includes('location') || errorMessage.includes('not supported')) {
+          return NextResponse.json({ 
+            error: '模型调用异常: 您所在的地区暂不支持此服务。请检查您的网络设置或联系管理员。' 
+          }, { status: 403 });
+        }
+        
+        if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
+          const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
+          return NextResponse.json({ 
+            error: `模型调用异常: API 配额已用完。免费配额限制为每天 20 次请求。请稍后再试（建议等待 ${retryAfter} 后重试），或升级您的 API 计划。` 
+          }, { status: 429 });
+        }
+        
+        throw new Error(`模型调用异常: ${errorMessage}`);
       }
       
-      // 处理配额超限错误
-      if (errorMessage.includes('quota') || errorMessage.includes('Quota exceeded') || errorMessage.includes('rate limit')) {
-        const retryAfter = data.error?.details?.[0]?.retryDelay || '稍后';
-        return NextResponse.json({ 
-          error: `模型调用异常: API 配额已用完。免费配额限制为每天 20 次请求。请稍后再试（建议等待 ${retryAfter} 后重试），或升级您的 API 计划。` 
-        }, { status: 429 });
+      // Gemini 返回格式
+      rawText = data.candidates[0].content.parts[0].text;
+    } else if (provider === 'huggingface') {
+      // Hugging Face API 格式（不同）
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify({
+          inputs: systemPrompt,
+          parameters: {
+            return_full_text: false,
+            max_new_tokens: 2000
+          }
+        })
+      });
+      
+      data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(`模型调用异常: ${data.error || '未知错误'}`);
       }
       
-      throw new Error(`模型调用异常: ${errorMessage}`);
+      // Hugging Face 返回格式是数组
+      rawText = Array.isArray(data) ? data[0]?.generated_text : data.generated_text;
+    } else {
+      // OpenAI 兼容格式 (Groq, OpenRouter, DeepSeek)
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      };
+      
+      // OpenRouter 需要额外的头部
+      if (provider === 'openrouter') {
+        headers["HTTP-Referer"] = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+        headers["X-Title"] = "Around the Fire";
+      }
+      
+      response = await fetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            {
+              role: "system",
+              content: "你是一位拥有极高智商、清冷文艺品味的女性策展人。你的目标是为女性深度用户生成知识学习路径。输出格式必须是纯 JSON，不得包含任何 Markdown 标签或解释文字。"
+            },
+            {
+              role: "user",
+              content: systemPrompt
+            }
+          ],
+          response_format: { type: "json_object" }, // 强制 JSON 格式
+          temperature: 0.7,
+          max_tokens: 2000
+        })
+      });
+      
+      data = await response.json();
+      
+      if (!response.ok) {
+        console.error(`${provider.toUpperCase()} API 报错:`, data);
+        const errorMessage = data.error?.message || data.error || '未知错误';
+        
+        if (errorMessage.includes('quota') || errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+          return NextResponse.json({ 
+            error: `模型调用异常: API 配额已用完或达到速率限制。请稍后再试，或检查您的 API 配额。` 
+          }, { status: 429 });
+        }
+        
+        throw new Error(`模型调用异常: ${errorMessage}`);
+      }
+      
+      // OpenAI 兼容格式返回
+      rawText = data.choices[0].message.content;
     }
-
-    // ✅ 解析逻辑优化
-    const rawText = data.candidates[0].content.parts[0].text;
     
     // 处理可能的 JSON 嵌套或多余字符
     let aiData;
     try {
       aiData = JSON.parse(rawText.replace(/```json|```/g, '').trim());
-      console.log("Gemini API 返回的解析数据: ", aiData); // 新增日志
+      console.log(`${provider.toUpperCase()} API 返回的解析数据: `, aiData);
     } catch (parseError) {
       console.error("JSON 解析失败，原始文本:", rawText);
       throw new Error("模型返回格式非有效 JSON");
